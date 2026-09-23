@@ -1232,7 +1232,8 @@ function judgeMusic() {
 const MUSIC_SCORE_MIN = 0.72; // between talking (max 0.68) and music (min 0.76)
 const MUSIC_BEAT_MIN = 0.09; // only trust a tempo estimate above this
 
-startHearingMusic();
+// Started once the config says which OS this is (see the start section):
+// hearing the computer's sound only works on Windows.
 
 api.onMood((mood) => {
   if (mood !== "party") return;
@@ -1311,6 +1312,7 @@ api.onCursor(hitTest);
 const config = await api.loadConfig();
 headTilt = config.headTilt ?? 0;
 speechMode = config.speech ?? "english";
+if (config.platform === "win32") startHearingMusic(); // Mac: dance mode follows Spotify only
 if (config.vrm) {
   try {
     await loadVrm(config.vrm);

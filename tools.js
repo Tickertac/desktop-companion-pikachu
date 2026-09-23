@@ -8,7 +8,7 @@
 // risky ones are fenced in: apps are only launched from Windows' own Start menu
 // list, never by a path the model supplies, and Google access is read-only.
 
-import { app, shell, clipboard, desktopCapturer, screen } from "electron";
+import { app, shell, clipboard, desktopCapturer, screen, systemPreferences } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import http from "node:http";
@@ -411,6 +411,11 @@ export async function runTool(name, input = {}) {
       return "Cancelled.";
     }
     case "look_at_screen": {
+      // macOS needs Screen Recording permission, or capture fails.
+      if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("screen") !== "granted") {
+        await desktopCapturer.getSources({ types: ["screen"] }).catch(() => {}); // makes macOS list/prompt for the app
+        return "I can't see the screen yet: macOS needs Screen Recording permission. Tell the user to open System Settings > Privacy & Security > Screen Recording, turn on Electron, then restart me.";
+      }
       const data = await screenshot();
       return [
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data } },

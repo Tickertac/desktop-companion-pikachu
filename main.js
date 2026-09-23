@@ -319,7 +319,7 @@ ipcMain.handle("speak", (_e, text) => {
 ipcMain.handle("load-config", () => {
   const vrmPath = character.vrm ? path.resolve(here, character.vrm) : null;
   const vrm = vrmPath && fs.existsSync(vrmPath) ? fs.readFileSync(vrmPath) : null;
-  return { name: character.name, vrm, headTilt: character.headTilt, speech: character.speech };
+  return { name: character.name, vrm, headTilt: character.headTilt, speech: character.speech, platform: process.platform };
 });
 
 ipcMain.handle("save-vrm", (_e, { fileName, bytes }) => {
@@ -410,9 +410,22 @@ app.whenReady().then(async () => {
   // Lets the window hear what the computer is playing (for dancing to any
   // music). Only the sound is used, and only to measure loudness and beat;
   // the screen video that comes with it is stopped straight away.
+  // System-sound capture ("loopback") only exists on Windows, so the renderer
+  // only asks there. Always answer the request, even on failure: an
+  // unanswered or throwing handler takes the app down (seen on a fresh Mac
+  // with no Screen Recording permission).
   session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
-    const [source] = await desktopCapturer.getSources({ types: ["screen"] });
-    callback(source ? { video: source, audio: "loopback" } : {});
+    try {
+      if (process.platform !== "win32") throw new Error("system audio capture is Windows-only");
+      const [source] = await desktopCapturer.getSources({ types: ["screen"] });
+      if (!source) throw new Error("no screen source");
+      callback({ video: source, audio: "loopback" });
+    } catch (err) {
+      log("screen/audio capture unavailable:", err.message);
+      try {
+        callback({});
+      } catch {}
+    }
   });
   createWindow();
 
