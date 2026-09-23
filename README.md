@@ -102,7 +102,7 @@ Edit `character.json`:
 |---|---|
 | `name` | The character's name |
 | `userName` | Fallback for what it calls you; `COMPANION_USER_NAME` in `.env` wins. `{user}` in `personality` becomes your name |
-| `personality` | Her personality, in plain English |
+| `personality` | The character's personality, in plain English |
 | `model` | `claude-haiku-4-5` (cheapest), `claude-sonnet-5` (smarter), `claude-opus-5` |
 | `voice` | Kokoro voice, e.g. `af_heart`, `af_bella`, `af_nicole`, `bf_emma`, `bf_lily` |
 | `speakingSpeed` | 1.0 is normal |
