@@ -28,7 +28,7 @@ The first launch downloads the voice model (about 330 MB). Later launches take a
 1. Install [Node.js](https://nodejs.org) (LTS) and Git (run `git --version` in Terminal; macOS offers to install it).
 2. In Terminal:
    ```bash
-   git clone https://github.com/<owner>/desktop-companion.git
+   git clone https://github.com/Tickertac/desktop-companion.git
    cd desktop-companion
    npm install
    cp .env.example .env
