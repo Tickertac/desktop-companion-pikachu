@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("companion", {
   speak: (text) => ipcRenderer.invoke("speak", text),
   walk: (dx) => ipcRenderer.invoke("walk", dx),
   mouseThrough: (on) => ipcRenderer.send("mouse-through", on),
+  log: (msg) => ipcRenderer.send("log", msg),
   quit: () => ipcRenderer.send("quit"),
   onChatDelta: (fn) => ipcRenderer.on("chat-delta", (_e, t) => fn(t)),
   onCursor: (fn) => ipcRenderer.on("cursor", (_e, p) => fn(p)),

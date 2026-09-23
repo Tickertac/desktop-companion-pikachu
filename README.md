@@ -55,6 +55,10 @@ adds them under **User Management** in the Spotify dashboard; Google test users 
 - On its own it wanders, hops, twirls, waves, sits, stretches or looks around every 25 to 60 seconds,
   and naps if you haven't talked to it for a couple of minutes. Talking wakes it up.
 - Excited replies (ending in "!") get both paws up.
+- **Dance mode:** whenever music plays on the computer (Spotify, YouTube, games, any app) it dances,
+  changing move every 8 counts at the song's tempo. It listens to the computer's sound output only to
+  measure level and beat (nothing is recorded or sent), and tells music from people talking by how
+  steady the sound is. Spotify playback is also detected directly.
 - The speech bubble sits above the head. Empty parts of the window let clicks through.
 
 ## What it can help with
@@ -112,5 +116,7 @@ Edit `character.json`:
 | `headTilt` | Resting nod in radians (+ is down). Use it if a model always seems to look up or down |
 
 ## Debug
+
+`%APPDATA%\desktop-companion\companion.log` records music detection and errors (fresh each launch).
 
 `npx electron . --snapshot` renders for 5 seconds, saves `snapshot.png`, and quits.

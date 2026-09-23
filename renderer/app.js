@@ -277,11 +277,11 @@ const axisZ = new THREE.Vector3(0, 0, 1);
 const smooth = (x) => x * x * (3 - 2 * x);
 
 // One dance move's pose at time `at` into the move.
-function dancePose(style, at) {
+function dancePose(style, at, bpm = danceBpm) {
   const p = Object.fromEntries(POSE_KEYS.map((k) => [k, 0]));
   // Spotify no longer shares song tempo with new apps, so dance to a steady
   // ~116 bpm. `beat` counts beats; sin(beat * PI) peaks once per beat.
-  const beat = at * (DANCE_BPM / 60);
+  const beat = at * (bpm / 60);
   const bounce = Math.abs(Math.sin(beat * Math.PI));
   const half = Math.sin(beat * Math.PI / 2); // swings over two beats
   switch (style) {
@@ -499,9 +499,9 @@ function targetPose(t) {
   if (a === "dance") {
     // Mix and match: arms (and head) from one move, hips and legs from
     // another, sometimes mirrored left-right.
-    const q = dancePose(action.style, at);
+    const q = dancePose(action.style, at, action.bpm);
     if (action.legs) {
-      const r = dancePose(action.legs, at);
+      const r = dancePose(action.legs, at, action.bpm);
       for (const k of LOWER_KEYS) q[k] = r[k];
     }
     if (action.mirror) mirrorPose(q);
@@ -638,14 +638,16 @@ function startAction(type, dur, extra = {}) {
   return true;
 }
 
-const DANCE_BPM = 116;
+// Tempo: heard from the music when possible, otherwise a steady 116 bpm.
+const DEFAULT_BPM = 116;
+let danceBpm = DEFAULT_BPM;
 const COUNTS_PER_MOVE = 8; // dance mode changes move every "5, 6, 7, 8"
 const DANCE_STYLES = ["groove", "sway", "shuffle", "bop", "punch", "hop", "ymca", "disco", "robot", "floss", "wiggle", "guitar", "stepturn", "clap", "carlton", "chicken", "sprinkler", "cabbage", "leanback", "kick"];
 const randomStyle = (not) => {
   const pool = DANCE_STYLES.filter((s) => s !== not);
   return pool[Math.floor(Math.random() * pool.length)];
 };
-const dance = (seconds = 8, style = randomStyle()) => startAction("dance", seconds, { style });
+const dance = (seconds = 8, style = randomStyle()) => startAction("dance", seconds, { style, bpm: danceBpm });
 
 // Dance mode: while Spotify is playing, keep dancing, changing moves every
 // set of 8 counts with the odd twirl. Talking, listening and walking come first.
@@ -659,7 +661,16 @@ const nextStyle = () => {
 const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 let movesUntilTwirl = randInt(3, 7);
 
+let lastDanceBlockLog = 0;
 function maybeDanceToMusic() {
+  if (musicOn && (!vrm || busy || recorder || (action && action.type !== "dance" && action.type !== "twirl"))) {
+    // Log why dance mode is waiting, at most every 10 s.
+    const now = timer.getElapsed();
+    if (now - lastDanceBlockLog > 10) {
+      lastDanceBlockLog = now;
+      api.log(`dance waiting: action=${action?.type ?? "none"} busy=${busy} listening=${!!recorder} model=${!!vrm}`);
+    }
+  }
   if (!musicOn || !vrm || action || busy || recorder) return;
   if (--movesUntilTwirl <= 0) {
     movesUntilTwirl = randInt(3, 7); // next twirl after 3 to 7 moves
@@ -667,7 +678,7 @@ function maybeDanceToMusic() {
   }
   const style = nextStyle();
   const legs = Math.random() < 0.5 ? nextStyle() : null; // half the time, mix two moves
-  startAction("dance", COUNTS_PER_MOVE * 60 / DANCE_BPM, { style, legs, mirror: Math.random() < 0.4 });
+  startAction("dance", COUNTS_PER_MOVE * 60 / danceBpm, { style, legs, mirror: Math.random() < 0.4, bpm: danceBpm });
 }
 const hop = () => startAction("hop", 1.1);
 const cheer = () => startAction("cheer", 1.4);
@@ -1087,15 +1098,141 @@ api.onStatus((text) => setStatus(text));
 
 // Music started (or something else fun happened): celebrate.
 // Spotify playback state, polled by main.js every few seconds.
-api.onMusic(({ playing }) => {
-  const started = playing && !musicOn;
+// Music is on when Spotify says it's playing, or when the computer is
+// playing something with a steady beat (YouTube, games, any app).
+let spotifyPlaying = false;
+let heardMusic = false;
+function updateMusic() {
+  const playing = spotifyPlaying || heardMusic;
+  if (playing === musicOn) return;
+  api.log(`music ${playing ? "on" : "off"} (spotify=${spotifyPlaying} heard=${heardMusic}) bpm=${danceBpm}`);
   musicOn = playing;
-  if (started) {
+  if (playing) {
     wake();
     getExcited(6);
+  } else {
+    if (action?.type === "dance") action = null;
+    danceBpm = DEFAULT_BPM;
   }
-  if (!playing && action?.type === "dance") action = null;
+}
+
+api.onMusic(({ playing }) => {
+  spotifyPlaying = playing;
+  updateMusic();
 });
+
+// ---------- hearing music on the computer ----------
+
+// Listens to the computer's sound output (loopback) and only measures it:
+// its level 50 times a second. Music is steady; talking keeps dipping between
+// words. The bass beat sets the dance tempo. Nothing is recorded or sent anywhere.
+const SAMPLE_HZ = 50;
+const WINDOW_S = 8;
+const bassHistory = []; // bass energy per sample, newest last
+const loudHistory = [];
+const bassShareHistory = []; // bass energy / all energy, per sample
+let musicVotes = 0;
+let sysAnalyser = null;
+let sysFreq = null;
+let sysWave = null;
+
+async function startHearingMusic() {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+    stream.getVideoTracks().forEach((t) => t.stop());
+    if (!stream.getAudioTracks().length) return api.log("system audio: no audio track");
+    const ctx = new AudioContext();
+    sysAnalyser = ctx.createAnalyser();
+    sysAnalyser.fftSize = 2048;
+    sysAnalyser.smoothingTimeConstant = 0;
+    ctx.createMediaStreamSource(stream).connect(sysAnalyser); // measured only, never played
+    sysFreq = new Uint8Array(sysAnalyser.frequencyBinCount);
+    sysWave = new Float32Array(sysAnalyser.fftSize);
+    setInterval(sampleSystemAudio, 1000 / SAMPLE_HZ);
+    setInterval(judgeMusic, 1000);
+    api.log(`system audio: listening (${ctx.sampleRate} Hz)`);
+  } catch (err) {
+    api.log(`system audio unavailable: ${err.message}`);
+  }
+}
+
+function sampleSystemAudio() {
+  // Pikachu's own voice comes out of the speakers too; don't dance to that.
+  const ownVoice = mouth > 0.02;
+  sysAnalyser.getByteFrequencyData(sysFreq);
+  sysAnalyser.getFloatTimeDomainData(sysWave);
+  const binHz = sysAnalyser.context.sampleRate / sysAnalyser.fftSize;
+  const bassBins = Math.max(2, Math.round(150 / binHz));
+  let bass = 0;
+  for (let i = 1; i <= bassBins; i++) bass += sysFreq[i];
+  let all = 0;
+  for (let i = 1; i < sysFreq.length / 4; i++) all += sysFreq[i]; // up to ~6 kHz
+  let sum = 0;
+  for (const v of sysWave) sum += v * v;
+  const rms = Math.sqrt(sum / sysWave.length);
+  const keep = SAMPLE_HZ * WINDOW_S;
+  bassHistory.push(ownVoice ? (bassHistory.at(-1) ?? 0) : bass / bassBins);
+  loudHistory.push(ownVoice ? 0 : rms);
+  if (bassHistory.length > keep) bassHistory.shift();
+  if (loudHistory.length > keep) loudHistory.shift();
+  if (!ownVoice && rms > 0.01) bassShareHistory.push(bass / (all || 1));
+  if (bassShareHistory.length > keep) bassShareHistory.shift();
+}
+
+// How strongly the bass pulses at a regular tempo, and at what tempo.
+function findBeat() {
+  // Onsets: how much the bass jumped since the previous sample.
+  const onset = bassHistory.map((v, i) => (i ? Math.max(0, v - bassHistory[i - 1]) : 0));
+  const mean = onset.reduce((a, b) => a + b, 0) / onset.length;
+  const o = onset.map((v) => v - mean);
+  const energy = o.reduce((a, v) => a + v * v, 0) || 1;
+  let best = { strength: 0, bpm: DEFAULT_BPM };
+  for (let bpm = 70; bpm <= 180; bpm += 1) {
+    const lag = (60 / bpm) * SAMPLE_HZ;
+    const l0 = Math.floor(lag);
+    const frac = lag - l0;
+    let acc = 0;
+    for (let i = l0 + 1; i < o.length; i++) acc += o[i] * (o[i - l0] * (1 - frac) + o[i - l0 - 1] * frac);
+    const strength = acc / energy;
+    if (strength > best.strength) best = { strength, bpm };
+  }
+  // Fold into a comfortable dancing range.
+  while (best.bpm < 85) best.bpm *= 2;
+  while (best.bpm > 160) best.bpm /= 2;
+  return best;
+}
+
+let lastAudioLog = 0;
+function judgeMusic() {
+  if (loudHistory.length < SAMPLE_HZ * WINDOW_S) return; // still filling the window
+  const loudFrac = loudHistory.filter((v) => v > 0.01).length / loudHistory.length;
+  const beat = findBeat();
+  // Speech dips between syllables; music stays full. Share of sounding
+  // moments that fall below half the average level.
+  const sounding = loudHistory.filter((v) => v > 0.01);
+  const avg = sounding.reduce((a, b) => a + b, 0) / (sounding.length || 1);
+  const dipRatio = sounding.filter((v) => v < avg * 0.5).length / (sounding.length || 1);
+  const bassShare = bassShareHistory.reduce((a, b) => a + b, 0) / (bassShareHistory.length || 1);
+  // Measured on this PC: music scored 0.76-0.94, people talking 0.48-0.68.
+  // (Beat strength and bass share overlapped too much to decide with.)
+  const musicScore = loudFrac - 0.5 * dipRatio;
+  const looksLikeMusic = musicScore > MUSIC_SCORE_MIN;
+  // Hysteresis: a couple of seconds to switch on, a few more to switch off.
+  musicVotes = Math.max(-4, Math.min(3, musicVotes + (looksLikeMusic ? 1 : -1)));
+  const now = timer.getElapsed();
+  if (now - lastAudioLog > 10) {
+    lastAudioLog = now;
+    api.log(`audio: score=${musicScore.toFixed(2)} loud=${loudFrac.toFixed(2)} dips=${dipRatio.toFixed(2)} bass=${bassShare.toFixed(3)} beat=${beat.strength.toFixed(2)} bpm=${Math.round(beat.bpm)} votes=${musicVotes}`);
+  }
+  if (musicVotes >= 2 && !heardMusic) heardMusic = true;
+  if (musicVotes <= -3 && heardMusic) heardMusic = false;
+  if (heardMusic && beat.strength > MUSIC_BEAT_MIN) danceBpm = Math.round(danceBpm * 0.6 + beat.bpm * 0.4);
+  updateMusic();
+}
+const MUSIC_SCORE_MIN = 0.72; // between talking (max 0.68) and music (min 0.76)
+const MUSIC_BEAT_MIN = 0.09; // only trust a tempo estimate above this
+
+startHearingMusic();
 
 api.onMood((mood) => {
   if (mood !== "party") return;

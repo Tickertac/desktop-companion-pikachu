@@ -2,7 +2,7 @@
 // (Groq Whisper for hearing, Claude for thinking, Kokoro for speaking).
 // The renderer never sees a key; it asks for work over IPC.
 
-import { app, BrowserWindow, ipcMain, screen, globalShortcut, session } from "electron";
+import { app, BrowserWindow, ipcMain, screen, globalShortcut, session, desktopCapturer } from "electron";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -367,6 +367,22 @@ ipcMain.on("mouse-through", (_e, on) => {
   if (process.env.DEBUG_HIT) console.log("HIT through=" + on);
 });
 
+// A small log in the app's data folder, since the desktop shortcut runs
+// without a console. Starts fresh each launch.
+const LOG_FILE = () => path.join(app.getPath("userData"), "companion.log");
+let logReady = false;
+function log(...parts) {
+  try {
+    if (!logReady) {
+      fs.mkdirSync(app.getPath("userData"), { recursive: true });
+      fs.writeFileSync(LOG_FILE(), "");
+      logReady = true;
+    }
+    fs.appendFileSync(LOG_FILE(), `${new Date().toLocaleTimeString("en-SG")} ${parts.join(" ")}\n`);
+  } catch {}
+}
+ipcMain.on("log", (_e, msg) => log("[ui]", String(msg).slice(0, 500)));
+
 ipcMain.on("quit", () => app.quit());
 
 // ---------- lifecycle ----------
@@ -391,6 +407,13 @@ app.whenReady().then(async () => {
   }
   loadHistory();
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === "media"));
+  // Lets the window hear what the computer is playing (for dancing to any
+  // music). Only the sound is used, and only to measure loudness and beat;
+  // the screen video that comes with it is stopped straight away.
+  session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
+    const [source] = await desktopCapturer.getSources({ types: ["screen"] });
+    callback(source ? { video: source, audio: "loopback" } : {});
+  });
   createWindow();
 
   // Dance mode: tell the character whether Spotify is playing. Only sends
@@ -398,10 +421,13 @@ app.whenReady().then(async () => {
   let lastPlaying = null;
   setInterval(async () => {
     if (win.isDestroyed()) return;
-    const state = await playbackState().catch(() => ({ playing: false }));
+    const state = await playbackState().catch((err) => {
+      log("spotify poll failed:", err.message);
+      return { playing: false };
+    });
     if (state.playing !== lastPlaying) {
       lastPlaying = state.playing;
-      console.log(state.playing ? `Music playing: ${state.title}` : "Music stopped");
+      log(state.playing ? `music playing: ${state.title}` : "music stopped");
       win.webContents.send("music", state);
     }
   }, 5000);
