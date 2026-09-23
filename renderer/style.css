@@ -1,0 +1,140 @@
+:root {
+  --stage: 64.6vh; /* bottom part of the window where the model stands */
+  --ink: #1d2233;
+  --paper: #ffffff;
+  --accent: #5b7cfa;
+  --live: #ef4c5c;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font: 14px/1.4 "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  user-select: none;
+}
+
+#stage {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: var(--stage);
+}
+
+/* Toolbar only shows while the mouse is over the window. */
+#toolbar {
+  position: fixed;
+  top: calc(100vh - var(--stage) + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+body.hot #toolbar { opacity: 1; }
+
+#toolbar button, #drag {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 15px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+#toolbar button:hover { background: #eef1ff; }
+#drag { -webkit-app-region: drag; cursor: grab; color: #8a90a6; }
+#btn-mic.live { background: var(--live); color: #fff; }
+
+#bubble {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  /* Grows upward from just above the head; app.js keeps --bubble-bottom on the ears. */
+  bottom: var(--bubble-bottom, calc(var(--stage) + 10px));
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.4s;
+  z-index: 5;
+}
+#bubble-text {
+  max-height: calc(100vh - var(--bubble-bottom, calc(var(--stage) + 10px)) - 34px);
+  overflow-y: auto;
+}
+
+/* Little tail pointing down at the character. */
+#bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  margin-left: -8px;
+  border: 8px solid transparent;
+  border-bottom: 0;
+  border-top-color: inherit;
+}
+#bubble { border-color: rgba(255, 255, 255, 0.95); }
+#bubble.you { border-color: rgba(230, 236, 255, 0.95); }
+#bubble.you { background: rgba(230, 236, 255, 0.95); font-style: italic; }
+
+#status {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(29, 34, 51, 0.85);
+  color: #fff;
+  font-size: 12px;
+  z-index: 5;
+}
+#status.live { background: var(--live); }
+
+#drop-hint {
+  position: fixed;
+  inset: calc(100vh - var(--stage) + 60px) 30px 90px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border: 2px dashed rgba(91, 124, 250, 0.8);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+  font-size: 15px;
+}
+body.dragging #drop-hint { background: rgba(230, 236, 255, 0.9); }
+
+#typebox {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 44px;
+  z-index: 6;
+}
+#typein {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  outline: none;
+}
+
+.hidden { display: none !important; }
+.faded { opacity: 0; }

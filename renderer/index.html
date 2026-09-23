@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Desktop Companion</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../node_modules/three/build/three.module.js",
+        "three/addons/": "../node_modules/three/examples/jsm/",
+        "@pixiv/three-vrm": "../node_modules/@pixiv/three-vrm/lib/three-vrm.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="toolbar">
+    <div id="drag" title="Drag to move">⠿</div>
+    <button id="btn-mic" title="Talk (Ctrl+Shift+Space)">🎤</button>
+    <button id="btn-type" title="Type instead">⌨</button>
+    <button id="btn-dance" title="Dance">♪</button>
+    <button id="btn-walk" title="Surprise me (random move)">🎲</button>
+    <button id="btn-reset" title="Forget this conversation">↺</button>
+    <button id="btn-close" title="Close">✕</button>
+  </div>
+
+  <div id="bubble" class="hidden"><div id="bubble-text"></div></div>
+  <div id="drop-hint" class="hidden"><span>Drop a <b>.vrm</b> file here<br />to give me a body</span></div>
+  <div id="status" class="hidden"></div>
+
+  <form id="typebox" class="hidden">
+    <input id="typein" autocomplete="off" placeholder="Say something…" />
+  </form>
+
+  <canvas id="stage"></canvas>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

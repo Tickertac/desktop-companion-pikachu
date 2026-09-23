@@ -1,0 +1,9 @@
+node_modules/
+.env
+google-credentials.json
+snapshot.png
+snap-*.png
+voice-samples/
+# Only the bundled Pikachu model is shared; models you drop in stay local.
+models/*
+!models/pikachu.vrm
