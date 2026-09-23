@@ -73,6 +73,7 @@ function createWindow() {
     alwaysOnTop: true,
     hasShadow: false,
     backgroundColor: "#00000000",
+    icon: path.join(here, "assets", process.platform === "win32" ? "pikachu.ico" : "pikachu.png"),
     webPreferences: {
       preload: path.join(here, "preload.cjs"),
       contextIsolation: true,

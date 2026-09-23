@@ -22,6 +22,7 @@ The first launch downloads the voice model (about 330 MB). Later launches take a
 
 **Desktop shortcut (Windows):** make a shortcut whose target is
 `<this folder>\node_modules\electron\dist\electron.exe "<this folder>"`, with "Start in" set to this folder.
+For the Pikachu icon, point the shortcut's icon at `assets\pikachu.ico`.
 
 ## Setup (Mac)
 
