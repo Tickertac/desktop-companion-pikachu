@@ -34,6 +34,7 @@ async function tokenRequest(params) {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: clientId(), ...params }),
+    signal: AbortSignal.timeout(8000),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || data.error || `token ${res.status}`);
@@ -110,6 +111,7 @@ async function api(method, route, body) {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body && { "Content-Type": "application/json" }) },
     body: body && JSON.stringify(body),
+    signal: AbortSignal.timeout(8000), // don't hang if the network isn't up yet (e.g. right after boot)
   });
   if (res.status === 204) return null;
   const text = await res.text();

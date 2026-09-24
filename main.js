@@ -307,6 +307,7 @@ ipcMain.handle("speak", (_e, text) => {
       return { samples: audio.audio, rate: Math.round(audio.sampling_rate * pitch) };
     } catch (err) {
       console.error("TTS failed:", err);
+      log("voice failed (falling back to the system voice):", err?.message || err);
       return { error: String(err?.message || err) };
     }
   });
@@ -461,9 +462,13 @@ app.whenReady().then(async () => {
   if (!SNAPSHOT) loadTTS().then(
     () => {
       console.log("Voice model ready.");
+      log("voice model ready");
       win?.webContents.send("tts-ready");
     },
-    (err) => console.error("Voice model failed to load:", err),
+    (err) => {
+      console.error("Voice model failed to load:", err);
+      log("voice model failed to load:", err?.message || err);
+    },
   );
 });
 
