@@ -222,6 +222,36 @@ function saveHistory() {
   fs.writeFileSync(HISTORY_FILE(), JSON.stringify(history));
 }
 
+// Graceful or energetic dancing for a Spotify song. The beat alone can't
+// tell calm piano from pop (their beat strengths overlap), but the model
+// knows most songs by title and artist. One tiny call per song, cached.
+const moodCache = new Map();
+async function songMood(title) {
+  if (!title) return null;
+  if (moodCache.has(title)) return moodCache.get(title);
+  const client = getAnthropic();
+  if (!client) return null;
+  try {
+    const res = await client.messages.create({
+      model: character.model,
+      max_tokens: 10, // a one-word answer
+      messages: [
+        {
+          role: "user",
+          content: `Song: "${title}". Would a dancer move to this gracefully (slow classical, piano, ambient, ballad, lo-fi, contemporary) or energetically (pop, hip hop, dance, rock, anything upbeat)? Answer with one word: graceful or energetic.`,
+        },
+      ],
+    });
+    const text = res.content.find((b) => b.type === "text")?.text?.toLowerCase() ?? "";
+    const mood = text.includes("graceful") ? "elegant" : "energetic";
+    moodCache.set(title, mood);
+    return mood;
+  } catch (err) {
+    log("song mood check failed:", err.message);
+    return null;
+  }
+}
+
 const MAX_STEPS = 6; // tool round-trips per reply
 
 ipcMain.handle("chat", (e, userText) => chatTurn(e.sender, userText));
@@ -499,16 +529,20 @@ app.whenReady().then(async () => {
 
   // Dance mode: tell the character whether Spotify is playing. Only sends
   // when it changes; errors (offline, not connected) just mean "not playing".
+  // Also sends the song's mood (graceful or energetic) when the track changes.
   let lastPlaying = null;
+  let lastTitle = null;
   setInterval(async () => {
     if (win.isDestroyed()) return;
     const state = await playbackState().catch((err) => {
       log("spotify poll failed:", err.message);
       return { playing: false };
     });
-    if (state.playing !== lastPlaying) {
+    if (state.playing !== lastPlaying || (state.playing && state.title !== lastTitle)) {
       lastPlaying = state.playing;
-      log(state.playing ? `music playing: ${state.title}` : "music stopped");
+      lastTitle = state.title;
+      if (state.playing) state.mood = await songMood(state.title);
+      log(state.playing ? `music playing: ${state.title} (${state.mood ?? "mood unknown"})` : "music stopped");
       win.webContents.send("music", state);
     }
   }, 5000);

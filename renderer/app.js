@@ -1229,8 +1229,20 @@ function updateMusic() {
   }
 }
 
-api.onMusic(({ playing }) => {
+// Spotify's song mood (asked of the model by title) beats guessing from the
+// beat; the beat is the fallback for everything else (YouTube, games...).
+let spotifyMood = null;
+function setMood(mood, why) {
+  if (mood === musicMood) return;
+  musicMood = mood;
+  api.log(`dance mood: ${mood} (${why})`);
+  // Switch style at once rather than finishing the current move.
+  if (action?.type === "dance") action = null;
+}
+api.onMusic(({ playing, mood }) => {
   spotifyPlaying = playing;
+  spotifyMood = playing ? mood ?? null : null;
+  if (spotifyMood) setMood(spotifyMood, "song");
   updateMusic();
 });
 
@@ -1343,13 +1355,12 @@ function judgeMusic() {
   if (heardMusic && beat.strength > MUSIC_BEAT_MIN) danceBpm = Math.round(danceBpm * 0.6 + beat.bpm * 0.4);
   // Graceful or energetic: soft piano measured beat 0.02-0.06, pop 0.07-0.25.
   // A gap between the two thresholds stops it flip-flopping.
-  if (looksLikeMusic) {
-    beatAvg = beatAvg * 0.6 + beat.strength * 0.4;
-    const mood = beatAvg < 0.065 ? "elegant" : beatAvg > 0.09 ? "energetic" : musicMood;
-    if (mood !== musicMood) {
-      musicMood = mood;
-      api.log(`dance mood: ${mood} (beat ${beatAvg.toFixed(3)})`);
-    }
+  // Only when Spotify hasn't said: calm piano and pop overlap on beat
+  // strength, so average slowly and go graceful only for a very soft beat.
+  if (looksLikeMusic && !(spotifyPlaying && spotifyMood)) {
+    beatAvg = beatAvg * 0.85 + beat.strength * 0.15;
+    const mood = beatAvg < 0.06 ? "elegant" : beatAvg > 0.085 ? "energetic" : musicMood;
+    setMood(mood, `beat ${beatAvg.toFixed(3)}`);
   }
   updateMusic();
 }
