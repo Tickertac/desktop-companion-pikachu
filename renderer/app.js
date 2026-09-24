@@ -953,7 +953,9 @@ function queueSpeech(sentence) {
   playChain = playChain.then(async () => {
     const res = await audioPromise;
     if (myEpoch !== epoch) return;
-    if (res.error) return speakWithSystemVoice(text);
+    // No Windows robot voice as a stand-in: if the real voice isn't ready,
+    // stay quiet (the bubble still shows the words). main.js logs why.
+    if (res.error) return;
     await playSamples(res.samples, res.rate);
   });
 }

@@ -41,6 +41,16 @@ const SNAPSHOT = process.argv.includes("--snapshot");
 const SAY = process.argv.flatMap((a, i, all) => (a === "--say" ? [all[i + 1]] : []));
 if (SAY.length) app.setPath("userData", path.join(os.tmpdir(), "desktop-companion-test"));
 
+// Only one Pikachu at a time: a second copy fights the first over the same
+// data files, voice cache and hotkey, and came up with the robot voice and
+// no Spotify. Launching again just brings the running one forward.
+const isMainInstance = SAY.length > 0 || SNAPSHOT || app.requestSingleInstanceLock();
+if (!isMainInstance) app.quit();
+app.on("second-instance", () => {
+  log("second launch ignored; showing the running Pikachu");
+  if (win && !win.isDestroyed()) win.showInactive();
+});
+
 let win;
 let anthropic = null;
 let history = [];
@@ -281,13 +291,20 @@ function loadTTS() {
     env.cacheDir = process.env.LOCALAPPDATA
       ? path.join(process.env.LOCALAPPDATA, "desktop-companion", "hf-cache") // Windows: local, not roaming
       : path.join(app.getPath("userData"), "hf-cache");
+    // Once downloaded, load it without touching the network, so a slow or
+    // missing connection at startup can't break the voice.
+    const cached = path.join(env.cacheDir, "onnx-community", "Kokoro-82M-v1.0-ONNX", "onnx", "model.onnx");
+    env.allowRemoteModels = !fs.existsSync(cached);
     const { KokoroTTS } = await import("kokoro-js");
     // fp32 measured ~4x faster than q8 on CPU here (2 s to make 3.6 s of speech).
     return KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
       dtype: "fp32",
       device: "cpu",
     });
-  })();
+  })().catch((err) => {
+    ttsPromise = null; // try again on the next reply instead of staying broken
+    throw err;
+  });
   return ttsPromise;
 }
 
@@ -389,6 +406,8 @@ ipcMain.on("quit", () => app.quit());
 // ---------- lifecycle ----------
 
 app.whenReady().then(async () => {
+  if (!isMainInstance) return;
+  log(`started (pid ${process.pid}) from ${here}`);
   if (SAY.length) {
     const sender = {
       send: (channel, data) => {
