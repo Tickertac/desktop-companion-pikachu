@@ -18,7 +18,7 @@ An anime character that sits in the corner of your screen, listens, and talks ba
 3. `npm start`, or double-click the desktop shortcut (see below).
 4. To use a different body, drag a `.vrm` file onto the window. It's copied into `models/` and remembered.
 
-The first launch downloads the voice model (about 330 MB). Later launches take a few seconds.
+The first launch downloads the voice model (about 330 MB) into `~/.desktop-companion`. Later launches take a few seconds.
 
 **Desktop shortcut (Windows):** make a shortcut whose target is
 `<this folder>\node_modules\electron\dist\electron.exe "<this folder>"`, with "Start in" set to this folder.
@@ -76,7 +76,9 @@ Ask in plain words; it picks the right tool.
 | "Play some lo-fi", "play Blinding Lights", "skip", "pause", "volume 30" | Spotify (Premium). Opens the app if needed. Needs the setup below. |
 | "What's on today?", "any unread emails?" | Google Calendar and Gmail, read-only. Needs the setup below. |
 
-Chat history, memory and reminders live in `%APPDATA%\desktop-companion\`.
+Chat history, memory, reminders, sign-ins and the voice model live in `~/.desktop-companion`
+(`C:\Users\<you>\.desktop-companion` on Windows), not AppData: Windows can give packaged apps a
+private copy of AppData, which split one Pikachu's data in two.
 
 ### Google Calendar and Gmail setup (once)
 
@@ -117,6 +119,7 @@ Edit `character.json`:
 
 ## Debug
 
-`%APPDATA%\desktop-companion\companion.log` records music detection and errors (fresh each launch).
+`~/.desktop-companion/companion.log` records music detection and errors (fresh each launch).
+`~/.desktop-companion/boot.log` records every launch, which data folder it used, and any crash.
 
 `npx electron . --snapshot` renders for 5 seconds, saves `snapshot.png`, and quits.
