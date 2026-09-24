@@ -39,12 +39,51 @@ const SNAPSHOT = process.argv.includes("--snapshot");
 // headlessly and prints replies and tool activity, using a throwaway data
 // folder so real history, memory and reminders are untouched.
 const SAY = process.argv.flatMap((a, i, all) => (a === "--say" ? [all[i + 1]] : []));
-if (SAY.length) app.setPath("userData", path.join(os.tmpdir(), "desktop-companion-test"));
+
+// Data (history, memory, reminders, sign-ins, voice model) lives in ~/.desktop-companion,
+// not AppData. Windows can give a packaged app (like the one a developer
+// launches this from) a private, redirected copy of AppData, so the same
+// Pikachu started two ways ended up with two different data folders: one had
+// the voice and Spotify sign-in, the other had neither. The home folder is
+// never redirected.
+const OLD_USER_DATA = app.getPath("userData");
+const DATA_DIR = SAY.length ? path.join(os.tmpdir(), "desktop-companion-test") : path.join(os.homedir(), ".desktop-companion");
+fs.mkdirSync(DATA_DIR, { recursive: true });
+app.setPath("userData", DATA_DIR);
+
+// Startup record, written before anything else can fail: which data folder
+// this launch uses, whether it's the only copy, and any crash.
+const BOOT_LOG = path.join(DATA_DIR, "boot.log");
+function boot(...parts) {
+  try {
+    fs.appendFileSync(BOOT_LOG, `${new Date().toLocaleString("en-SG")} [pid ${process.pid}] ${parts.join(" ")}\n`);
+  } catch {}
+}
+process.on("uncaughtException", (err) => boot("CRASH:", err?.stack || err));
+process.on("unhandledRejection", (err) => boot("UNHANDLED:", err?.stack || err));
+boot(`launch from ${here}; data=${DATA_DIR}; args=${JSON.stringify(process.argv.slice(1))}`);
+
+// One-time move from the old AppData location: bring over whatever this
+// launch can see there (chat history, memory, reminders, sign-ins).
+if (!SAY.length && !fs.existsSync(path.join(DATA_DIR, "migrated.txt"))) {
+  const moved = [];
+  for (const f of ["history.json", "memory.json", "reminders.json", "spotify-token.json", "google-token.json"]) {
+    const from = path.join(OLD_USER_DATA, f);
+    const to = path.join(DATA_DIR, f);
+    if (fs.existsSync(from) && !fs.existsSync(to)) {
+      fs.copyFileSync(from, to);
+      moved.push(f);
+    }
+  }
+  fs.writeFileSync(path.join(DATA_DIR, "migrated.txt"), `from ${OLD_USER_DATA}: ${moved.join(", ") || "nothing"}\n`);
+  boot(`moved data from ${OLD_USER_DATA}: ${moved.join(", ") || "nothing"}`);
+}
 
 // Only one Pikachu at a time: a second copy fights the first over the same
 // data files, voice cache and hotkey, and came up with the robot voice and
 // no Spotify. Launching again just brings the running one forward.
 const isMainInstance = SAY.length > 0 || SNAPSHOT || app.requestSingleInstanceLock();
+boot(`single-instance lock: ${isMainInstance ? "got it (this is the main Pikachu)" : "held by another copy, quitting"}`);
 if (!isMainInstance) app.quit();
 app.on("second-instance", () => {
   log("second launch ignored; showing the running Pikachu");
@@ -288,9 +327,13 @@ function loadTTS() {
   ttsPromise ??= (async () => {
     // Keep the ~300 MB voice model out of SynologyDrive: syncing it stalls the download.
     const { env } = await import("@huggingface/transformers");
-    env.cacheDir = process.env.LOCALAPPDATA
-      ? path.join(process.env.LOCALAPPDATA, "desktop-companion", "hf-cache") // Windows: local, not roaming
-      : path.join(app.getPath("userData"), "hf-cache");
+    env.cacheDir = path.join(DATA_DIR, "hf-cache");
+    // One-time: reuse a model already downloaded to the old location.
+    const oldCache = process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "desktop-companion", "hf-cache");
+    if (!fs.existsSync(env.cacheDir) && oldCache && fs.existsSync(oldCache)) {
+      fs.cpSync(oldCache, env.cacheDir, { recursive: true });
+      log("voice model copied from the old cache");
+    }
     // Once downloaded, load it without touching the network, so a slow or
     // missing connection at startup can't break the voice.
     const cached = path.join(env.cacheDir, "onnx-community", "Kokoro-82M-v1.0-ONNX", "onnx", "model.onnx");
@@ -397,8 +440,12 @@ function log(...parts) {
       logReady = true;
     }
     fs.appendFileSync(LOG_FILE(), `${new Date().toLocaleTimeString("en-SG")} ${parts.join(" ")}\n`);
-  } catch {}
+  } catch (err) {
+    if (!logFailed) boot("companion.log write failed:", err?.code || "", err?.message || err); // report once
+    logFailed = true;
+  }
 }
+let logFailed = false;
 ipcMain.on("log", (_e, msg) => log("[ui]", String(msg).slice(0, 500)));
 
 ipcMain.on("quit", () => app.quit());
@@ -408,6 +455,7 @@ ipcMain.on("quit", () => app.quit());
 app.whenReady().then(async () => {
   if (!isMainInstance) return;
   log(`started (pid ${process.pid}) from ${here}`);
+  boot("ready; window opening");
   if (SAY.length) {
     const sender = {
       send: (channel, data) => {
