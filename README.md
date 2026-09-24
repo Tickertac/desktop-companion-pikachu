@@ -59,6 +59,10 @@ adds them under **User Management** in the Spotify dashboard; Google test users 
   changing move every 8 counts at the song's tempo. It listens to the computer's sound output only to
   measure level and beat (nothing is recorded or sent), and tells music from people talking by how
   steady the sound is. Spotify playback is also detected directly.
+- **Graceful mode:** for soft, slow music (classical, piano, ambient, contemporary) it switches to
+  slow, flowing moves with long lines: port de bras, arabesque, plie and rise, side reach, developpe,
+  swan arms, lunge reach, and a reverence bow, plus a slow pirouette. It decides from how strong the
+  beat is (Windows only; on a Mac, dance mode follows Spotify and stays energetic).
 - The speech bubble sits above the head. Empty parts of the window let clicks through.
 
 ## What it can help with

@@ -277,14 +277,102 @@ const axisZ = new THREE.Vector3(0, 0, 1);
 const smooth = (x) => x * x * (3 - 2 * x);
 
 // One dance move's pose at time `at` into the move.
-function dancePose(style, at, bpm = danceBpm) {
+function dancePose(style, at, bpm = danceBpm, dur = 8) {
   const p = Object.fromEntries(POSE_KEYS.map((k) => [k, 0]));
   // Spotify no longer shares song tempo with new apps, so dance to a steady
   // ~116 bpm. `beat` counts beats; sin(beat * PI) peaks once per beat.
   const beat = at * (bpm / 60);
   const bounce = Math.abs(Math.sin(beat * Math.PI));
   const half = Math.sin(beat * Math.PI / 2); // swings over two beats
+  // Graceful moves are shaped over the whole move, not the beat: `u` runs
+  // 0 to 1 across it, and `env` eases in, holds the line, and eases out.
+  const u = Math.min(at / dur, 1);
+  const env = smooth(Math.min(1, u * 3)) * smooth(Math.min(1, (1 - u) * 3));
   switch (style) {
+    // ---- graceful: long lines, slow stretches (for soft, slow music) ----
+    case "portdebras": { // arms sweep up in a big arc, torso following, then down
+      const rise = Math.sin(u * Math.PI);
+      const follow = Math.sin(Math.max(0, u - 0.12) / 0.88 * Math.PI);
+      // Peaks at a high V (2.3), not straight up: short arms vanish behind the head.
+      p.raiseR = 0.3 + 2.0 * rise;
+      p.raiseL = 0.3 + 2.0 * follow;
+      p.swingL = p.swingR = 0.3 * rise;
+      p.lean = 0.12 * rise; // gentle back arch at the top
+      p.spineSway = 0.08 * Math.sin(u * Math.PI * 2);
+      p.nod = -0.06 * rise; // eyes follow the hands up
+      break;
+    }
+    case "arabesque": // one leg long behind, arms reaching, leaning into the line
+      p.legR = -0.9 * env;
+      p.lean = -0.18 * env;
+      p.raiseL = 0.3 + 1.9 * env;
+      p.swingL = 0.8 * env;
+      p.raiseR = 0.3 + 1.2 * env;
+      p.swingR = -0.2 * env;
+      p.hipsY = 0.02 * env;
+      break;
+    case "plie": { // two slow plie-and-rise cycles, arms rounding overhead on the rise
+      const w = Math.sin(u * Math.PI * 4);
+      const bend = Math.max(0, w);
+      const rise = Math.max(0, -w);
+      p.kneeL = p.kneeR = 0.45 * bend;
+      p.legL = p.legR = 0.2 * bend;
+      p.spreadL = p.spreadR = 0.15 * bend;
+      p.hipsY = -0.05 * bend + 0.03 * rise;
+      p.raiseL = p.raiseR = 1.1 + 1.1 * rise;
+      p.swingL = p.swingR = 0.5;
+      break;
+    }
+    case "sidereach": { // long side bend with the far arm stretched overhead, each side
+      const side = u < 0.5 ? 1 : -1;
+      const reach = Math.sin(((u * 2) % 1) * Math.PI);
+      p.spineSway = 0.3 * reach * side;
+      p.hipsSway = -0.1 * reach * side;
+      p.raiseR = side > 0 ? 0.3 + 2.0 * reach : 0.4;
+      p.raiseL = side < 0 ? 0.3 + 2.0 * reach : 0.4;
+      p.yaw = 0.1 * side * reach;
+      break;
+    }
+    case "developpe": { // a leg slowly lifts, unfolds forward, and lowers; then the other
+      const left = u < 0.5;
+      const lift = Math.sin(((u * 2) % 1) * Math.PI);
+      const unfold = 0.8 * Math.sin(lift * Math.PI); // bent on the way, straight at the top
+      if (left) { p.legL = 1.1 * lift; p.kneeL = unfold; } else { p.legR = 1.1 * lift; p.kneeR = unfold; }
+      p.raiseL = p.raiseR = 0.3 + 1.4 * lift;
+      p.hipsY = 0.02 * lift;
+      p.lean = 0.05 * lift;
+      break;
+    }
+    case "swan": { // slow wing-like arm waves, gentle rise and fall
+      const wave = Math.sin(u * Math.PI * 4);
+      p.raiseL = p.raiseR = 1.4 + 0.6 * wave;
+      p.swingL = p.swingR = -0.2 + 0.2 * Math.sin(u * Math.PI * 4 + 1);
+      p.hipsY = 0.02 * wave;
+      p.kneeL = p.kneeR = 0.15 * (1 - wave) / 2;
+      p.nod = -0.03 * wave;
+      break;
+    }
+    case "lunge": // step into a long lunge, reaching forward and up
+      p.legL = 0.6 * env;
+      p.kneeL = 0.6 * env;
+      p.legR = -0.45 * env;
+      p.kneeR = 0.1 * env;
+      p.hipsY = -0.05 * env;
+      p.lean = -0.12 * env;
+      p.raiseL = p.raiseR = 0.3 + 1.7 * env;
+      p.swingL = p.swingR = 0.7 * env;
+      break;
+    case "reverence": // the ballet bow: one leg back, arms opening low, bowing forward
+      p.legR = -0.35 * env;
+      p.kneeL = 0.4 * env;
+      p.hipsY = -0.04 * env;
+      p.lean = -0.3 * env;
+      p.raiseL = p.raiseR = 0.3 + 0.9 * env;
+      p.swingL = p.swingR = -0.3 * env;
+      p.nod = 0.12 * env;
+      break;
+
+    // ---- energetic: on the beat (for pop, hip hop, dance music) ----
     case "sway": // arms up overhead, swaying side to side
       p.hipsSway = half * 0.18;
       p.spineSway = -p.hipsSway * 0.8;
@@ -499,9 +587,9 @@ function targetPose(t) {
   if (a === "dance") {
     // Mix and match: arms (and head) from one move, hips and legs from
     // another, sometimes mirrored left-right.
-    const q = dancePose(action.style, at, action.bpm);
+    const q = dancePose(action.style, at, action.bpm, action.dur);
     if (action.legs) {
-      const r = dancePose(action.legs, at, action.bpm);
+      const r = dancePose(action.legs, at, action.bpm, action.dur);
       for (const k of LOWER_KEYS) q[k] = r[k];
     }
     if (action.mirror) mirrorPose(q);
@@ -539,10 +627,19 @@ function targetPose(t) {
   }
 
   if (a === "twirl") {
-    const k = Math.min(at / 1.3, 1);
+    // Quick spin with arms out; or, for graceful music, a slow pirouette up on
+    // the toes with the arms held round in front.
+    const k = Math.min(at / (action.slow ? 3 : 1.3), 1);
     spin = smooth(k) * Math.PI * 2;
-    p.raiseL = p.raiseR = 1.3;
-    p.hipsY = Math.sin(k * Math.PI) * 0.05;
+    if (action.slow) {
+      p.raiseL = p.raiseR = 1.0;
+      p.swingL = p.swingR = 0.7;
+      p.hipsY = 0.03 * Math.sin(k * Math.PI);
+      p.nod = -0.04;
+    } else {
+      p.raiseL = p.raiseR = 1.3;
+      p.hipsY = Math.sin(k * Math.PI) * 0.05;
+    }
   }
 
   if (a === "wave") {
@@ -594,7 +691,7 @@ function targetPose(t) {
 // every model. `facing` fixes the sign for VRM0 models, which face -Z inside.
 function applyBodyPose(t, dt) {
   const target = targetPose(t);
-  const ease = 1 - Math.exp(-dt * 10);
+  const ease = 1 - Math.exp(-dt * (action?.soft ? 2.5 : 10)); // graceful moves flow slowly
   const slowEase = 1 - Math.exp(-dt * 2.5);
   for (const k of POSE_KEYS) pose[k] += (target[k] - pose[k]) * (SLOW_KEYS.has(k) ? slowEase : ease);
 
@@ -658,6 +755,14 @@ const nextStyle = () => {
   if (!danceBag.length) danceBag = [...DANCE_STYLES].sort(() => Math.random() - 0.5);
   return danceBag.pop();
 };
+// Graceful set, for slow, soft music (classical, piano, ambient, contemporary).
+const ELEGANT_STYLES = ["portdebras", "arabesque", "plie", "sidereach", "developpe", "swan", "lunge", "reverence"];
+let elegantBag = [];
+const nextElegant = () => {
+  if (!elegantBag.length) elegantBag = [...ELEGANT_STYLES].sort(() => Math.random() - 0.5);
+  return elegantBag.pop();
+};
+let musicMood = "energetic"; // or "elegant"; set from how strong the beat is
 const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 let movesUntilTwirl = randInt(3, 7);
 
@@ -672,9 +777,15 @@ function maybeDanceToMusic() {
     }
   }
   if (!musicOn || !vrm || action || busy || recorder) return;
+  const elegant = musicMood === "elegant";
   if (--movesUntilTwirl <= 0) {
     movesUntilTwirl = randInt(3, 7); // next twirl after 3 to 7 moves
-    return twirl();
+    return elegant ? startAction("twirl", 3.3, { slow: true, soft: true }) : twirl();
+  }
+  if (elegant) {
+    // Long, clean lines: at least 7 s per move, not mixed, sometimes mirrored.
+    const dur = Math.max(COUNTS_PER_MOVE * 60 / danceBpm, 7);
+    return startAction("dance", dur, { style: nextElegant(), mirror: Math.random() < 0.5, bpm: danceBpm, soft: true });
   }
   const style = nextStyle();
   const legs = Math.random() < 0.5 ? nextStyle() : null; // half the time, mix two moves
@@ -1134,6 +1245,7 @@ const bassHistory = []; // bass energy per sample, newest last
 const loudHistory = [];
 const bassShareHistory = []; // bass energy / all energy, per sample
 let musicVotes = 0;
+let beatAvg = 0.1; // smoothed beat strength, for choosing graceful vs energetic
 let sysAnalyser = null;
 let sysFreq = null;
 let sysWave = null;
@@ -1229,6 +1341,16 @@ function judgeMusic() {
   if (musicVotes >= 2 && !heardMusic) heardMusic = true;
   if (musicVotes <= -3 && heardMusic) heardMusic = false;
   if (heardMusic && beat.strength > MUSIC_BEAT_MIN) danceBpm = Math.round(danceBpm * 0.6 + beat.bpm * 0.4);
+  // Graceful or energetic: soft piano measured beat 0.02-0.06, pop 0.07-0.25.
+  // A gap between the two thresholds stops it flip-flopping.
+  if (looksLikeMusic) {
+    beatAvg = beatAvg * 0.6 + beat.strength * 0.4;
+    const mood = beatAvg < 0.065 ? "elegant" : beatAvg > 0.09 ? "energetic" : musicMood;
+    if (mood !== musicMood) {
+      musicMood = mood;
+      api.log(`dance mood: ${mood} (beat ${beatAvg.toFixed(3)})`);
+    }
+  }
   updateMusic();
 }
 const MUSIC_SCORE_MIN = 0.72; // between talking (max 0.68) and music (min 0.76)
