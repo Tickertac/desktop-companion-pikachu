@@ -61,7 +61,8 @@ adds them under **User Management** in the Spotify dashboard; Google test users 
   steady the sound is. Spotify playback is also detected directly.
 - **Graceful mode:** for soft, slow music (classical, piano, ambient, contemporary) it switches to
   slow, flowing moves with long lines: port de bras, arabesque, plie and rise, side reach, developpe,
-  swan arms, lunge reach, and a reverence bow, plus a slow pirouette. It decides from how strong the
+  swan arms, lunge reach, a reverence bow, and yoga poses (tree, warrior II, triangle, sun
+  salutation, chair, dancer, goddess, and a slow breathing flow), plus a slow pirouette. It decides from how strong the
   beat is (Windows only; on a Mac, dance mode follows Spotify and stays energetic).
 - The speech bubble sits above the head. Empty parts of the window let clicks through.
 

@@ -372,6 +372,90 @@ function dancePose(style, at, bpm = danceBpm, dur = 8) {
       p.nod = 0.12 * env;
       break;
 
+    // ---- graceful, from yoga: balance, long holds, breathing ----
+    case "tree": // stand on one leg, the other knee out to the side, arms rising overhead
+      p.spreadL = 0.7 * env;
+      p.legL = 0.5 * env;
+      p.kneeL = 1.7 * env;
+      p.hipsY = 0.01 * env;
+      p.raiseL = p.raiseR = 0.3 + 1.9 * env;
+      p.swingL = p.swingR = 0.35 * env; // hands drawn together overhead
+      p.hipsSway = 0.04 * env; // weight over the standing leg
+      break;
+    case "warrior2": // wide stance, front knee bent, arms long, body turned
+      p.spreadL = 0.35 * env;
+      p.spreadR = 0.35 * env;
+      p.legL = 0.3 * env;
+      p.kneeL = 0.55 * env;
+      p.hipsY = -0.05 * env;
+      p.raiseL = p.raiseR = 0.3 + 1.3 * env;
+      p.yaw = 0.35 * env;
+      break;
+    case "triangle": // wide legs, deep side bend, arms one long vertical line
+      p.spreadL = p.spreadR = 0.35 * env;
+      p.spineSway = 0.5 * env;
+      p.hipsSway = -0.1 * env;
+      p.raiseL = p.raiseR = 0.3 + 1.3 * env; // straight out; the bend stands them up
+      p.yaw = 0.15 * env;
+      break;
+    case "sunsalute": { // reach up and arch, fold forward, half lift, rise back up
+      const frames = [
+        [0.0, { raise: 0.3, swing: 0, lean: 0, knee: 0, nod: 0 }],
+        [0.2, { raise: 2.2, swing: 0.3, lean: 0.15, knee: 0, nod: -0.06 }], // reach up
+        [0.45, { raise: 0.6, swing: 0.9, lean: -0.45, knee: 0.15, nod: 0.12 }], // fold
+        [0.65, { raise: 0.8, swing: 0.6, lean: -0.22, knee: 0.1, nod: 0 }], // half lift
+        [0.85, { raise: 2.2, swing: 0.3, lean: 0.1, knee: 0, nod: -0.05 }], // rise
+        [1.0, { raise: 0.3, swing: 0, lean: 0, knee: 0, nod: 0 }],
+      ];
+      let i = 0;
+      while (i < frames.length - 2 && u > frames[i + 1][0]) i++;
+      const [u0, a] = frames[i];
+      const [u1, b] = frames[i + 1];
+      const k = smooth(Math.min(1, Math.max(0, (u - u0) / (u1 - u0))));
+      const mix = (key) => a[key] + (b[key] - a[key]) * k;
+      p.raiseL = p.raiseR = mix("raise");
+      p.swingL = p.swingR = mix("swing");
+      p.lean = mix("lean");
+      p.kneeL = p.kneeR = mix("knee");
+      p.nod = mix("nod");
+      break;
+    }
+    case "chair": // deep knee bend, sitting back, arms forward and up
+      p.kneeL = p.kneeR = 0.75 * env;
+      p.legL = p.legR = 0.45 * env;
+      p.hipsY = -0.08 * env;
+      p.lean = -0.15 * env;
+      p.raiseL = p.raiseR = 0.3 + 1.6 * env;
+      p.swingL = p.swingR = 0.6 * env;
+      break;
+    case "dancer": // one leg lifted behind, one arm back to it, the other reaching forward
+      p.legR = -0.8 * env;
+      p.kneeR = 1.2 * env;
+      p.raiseR = 0.3 + 0.6 * env;
+      p.swingR = -0.8 * env;
+      p.raiseL = 0.3 + 1.8 * env;
+      p.swingL = 0.7 * env;
+      p.lean = -0.22 * env;
+      p.hipsSway = 0.04 * env;
+      break;
+    case "goddess": // wide squat, knees out, arms open wide
+      p.spreadL = p.spreadR = 0.5 * env;
+      p.kneeL = p.kneeR = 0.7 * env;
+      p.legL = p.legR = 0.25 * env;
+      p.hipsY = -0.09 * env;
+      p.raiseL = p.raiseR = 0.3 + 1.3 * env;
+      p.nod = -0.04 * env;
+      break;
+    case "breath": { // arms float up on the inhale, down on the exhale; two breaths
+      const breath = (1 - Math.cos(u * Math.PI * 4)) / 2; // 0 -> 1 -> 0, twice
+      p.raiseL = p.raiseR = 0.3 + 1.9 * breath;
+      p.swingL = p.swingR = 0.25 * breath;
+      p.hipsY = 0.025 * breath;
+      p.lean = 0.06 * breath;
+      p.nod = -0.05 * breath;
+      break;
+    }
+
     // ---- energetic: on the beat (for pop, hip hop, dance music) ----
     case "sway": // arms up overhead, swaying side to side
       p.hipsSway = half * 0.18;
@@ -755,8 +839,12 @@ const nextStyle = () => {
   if (!danceBag.length) danceBag = [...DANCE_STYLES].sort(() => Math.random() - 0.5);
   return danceBag.pop();
 };
-// Graceful set, for slow, soft music (classical, piano, ambient, contemporary).
-const ELEGANT_STYLES = ["portdebras", "arabesque", "plie", "sidereach", "developpe", "swan", "lunge", "reverence"];
+// Graceful set, for slow, soft music (classical, piano, ambient, contemporary):
+// ballet-style moves plus yoga poses.
+const ELEGANT_STYLES = [
+  "portdebras", "arabesque", "plie", "sidereach", "developpe", "swan", "lunge", "reverence",
+  "tree", "warrior2", "triangle", "sunsalute", "chair", "dancer", "goddess", "breath", // yoga
+];
 let elegantBag = [];
 const nextElegant = () => {
   if (!elegantBag.length) elegantBag = [...ELEGANT_STYLES].sort(() => Math.random() - 0.5);
